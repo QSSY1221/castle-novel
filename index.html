@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>血色回廊 · 古堡无限流</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", "Songti SC", serif;
+    background: #0a0608;
+    color: #d4c4a8;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    background-image:
+      radial-gradient(ellipse at top, rgba(139,0,0,0.15) 0%, transparent 60%),
+      radial-gradient(ellipse at bottom, rgba(80,0,20,0.2) 0%, transparent 60%);
+  }
+  .container {
+    max-width: 720px; width: 100%;
+    background: linear-gradient(180deg, rgba(30,10,10,0.95) 0%, rgba(20,5,8,0.98) 100%);
+    border-radius: 4px; padding: 40px 36px;
+    box-shadow: 0 0 60px rgba(120,0,20,0.3), inset 0 0 80px rgba(0,0,0,0.5);
+    border: 1px solid rgba(139,0,0,0.3); position: relative;
+  }
+  .container::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(180,20,30,0.6), transparent);
+  }
+  h1 { text-align: center; color: #8b0000; font-size: 32px; margin-bottom: 6px; letter-spacing: 8px; text-shadow: 0 0 20px rgba(139,0,0,0.5); }
+  .subtitle { text-align: center; color: #664; font-size: 12px; margin-bottom: 8px; letter-spacing: 3px; }
+  .status-bar { display: flex; justify-content: space-between; padding: 10px 14px; background: rgba(0,0,0,0.5); border: 1px solid rgba(139,0,0,0.2); border-radius: 3px; font-size: 13px; color: #a88; margin-bottom: 20px; }
+  .status-bar span { color: #d4c4a8; }
+  .scene-title { font-size: 22px; color: #c83030; margin: 20px 0 16px; padding-bottom: 10px; border-bottom: 1px solid rgba(139,0,0,0.3); letter-spacing: 2px; }
+  .scene-text { line-height: 2; font-size: 15px; margin-bottom: 24px; color: #c4b498; }
+  .scene-text b { color: #e85050; }
+  .hint { background: rgba(139,0,0,0.1); border-left: 3px solid #8b0000; padding: 10px 14px; margin: 16px 0; font-size: 13px; color: #a88; font-style: italic; }
+  .choices { list-style: none; }
+  .choice-btn { display: block; width: 100%; padding: 13px 18px; margin: 8px 0; background: rgba(40,10,15,0.6); border: 1px solid rgba(139,0,0,0.4); border-radius: 2px; color: #d4c4a8; font-size: 14px; cursor: pointer; text-align: left; transition: all 0.3s; font-family: inherit; }
+  .choice-btn:hover { background: rgba(139,0,0,0.25); border-color: #c83030; transform: translateX(3px); }
+  .choice-btn .req { color: #a88; font-size: 12px; margin-left: 6px; }
+  .choice-btn:disabled { opacity: 0.4; cursor: not-allowed; background: rgba(20,10,10,0.3); }
+  .ending-good { text-align: center; color: #4ade80; font-size: 22px; margin: 20px 0; text-shadow: 0 0 15px rgba(74,222,128,0.4); }
+  .ending-bad { text-align: center; color: #e85050; font-size: 22px; margin: 20px 0; text-shadow: 0 0 15px rgba(232,80,80,0.4); }
+  .ending-secret { text-align: center; color: #a855f7; font-size: 22px; margin: 20px 0; text-shadow: 0 0 15px rgba(168,85,247,0.4); }
+  .inventory { margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid rgba(139,0,0,0.2); font-size: 13px; }
+  .inventory-title { color: #c83030; margin-bottom: 8px; letter-spacing: 2px; }
+  .item-tag { display: inline-block; padding: 3px 10px; margin: 3px; background: rgba(139,0,0,0.15); border: 1px solid rgba(139,0,0,0.3); border-radius: 2px; color: #d4c4a8; font-size: 12px; }
+  .restart-btn { display: block; margin: 20px auto 0; padding: 12px 40px; background: linear-gradient(135deg, #4a0000, #8b0000); border: 1px solid #c83030; border-radius: 2px; color: #fff; font-size: 14px; font-weight: bold; cursor: pointer; font-family: inherit; letter-spacing: 3px; transition: all 0.3s; }
+  .restart-btn:hover { background: linear-gradient(135deg, #8b0000, #c83030); }
+  .footer { text-align: center; margin-top: 20px; color: #332; font-size: 11px; letter-spacing: 2px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>血色回廊</h1>
+  <p class="subtitle">— 古堡无限流 —</p>
+  <div class="status-bar">
+    <div>轮回次数: <span id="loopCount">0</span></div>
+    <div id="chapterLabel">序章</div>
+  </div>
+  <div id="sceneContainer"></div>
+  <div id="inventoryArea"></div>
+  <div class="footer">血色回廊 · 双击文件即可游玩</div>
+</div>
+
+<script>
+// ==================== 游戏数据 ====================
+// 注意：JS字符串里的内部双引号用 \" 转义，或者直接用中文引号 "" 代替
+const GAME = {
+  title: "血色回廊",
+  start: "p0_wake",
+  chapters: {
+    prologue: "序章 · 醒来",
+    ch1: "第一章 · 一层大厅",
+    ch2: "第二章 · 二层回廊",
+    ch3: "第三章 · 三层密室",
+    ch4: "第四章 · 地下地牢",
+    ch5: "终章 · 血色真相"
+  },
+  scenes: {
+
+    // ========== 序章 ==========
+    p0_wake: {
+      chapter: "prologue",
+      title: "醒来",
+      text: "你睁开眼，头痛欲裂。\n\n四周一片漆黑，只有远处传来微弱的——滴水声？不，那是黏稠的液体缓缓坠落的声音。空气中弥漫着铁锈和腐朽混合的味道。\n\n你记得自己在等末班公交车，然后……然后就不记得了。\n\n试着动了动身体，你发现自己躺在一张冰冷的石地上。左手边触到了一块带尖刺的金属物——是一把锈迹斑斑的铁钳。右手边……是一个布袋，里面鼓鼓囊囊地装着什么。",
+      hints: ["你失去了来到这里的记忆", "铁钳和布袋是你仅有的东西"],
+      choices: [
+        { text: "A. 先打开布袋看看有什么", next: "p0_open_bag" },
+        { text: "B. 握紧铁钳，先观察周围环境", next: "p0_observe" },
+        { text: "C. 呼喊求救", next: "p0_call_out" }
+      ]
+    },
+
+    p0_open_bag: {
+      chapter: "prologue",
+      title: "布袋里的东西",
+      text: "你摸出布袋里的东西：一小节燃尽的蜡烛、半盒火柴、一张被血渍浸染的纸条，和一把带血的银质匕首。\n\n纸条上歪歪扭扭地写着：\n\n「不要相信穿红衣的女人\n地下室有它的名字\n如果你看到自己——\n跑。」\n\n笔迹潦草，像是在极度恐惧中写下的。",
+      hints: ["纸条上的警告似乎指向古堡的秘密", "银匕首……银器能驱邪？"],
+      grantItems: ["铁钳", "半盒火柴", "染血纸条", "银匕首"],
+      choices: [
+        { text: "A. 现在试试点火柴，看看周围", next: "p0_light" },
+        { text: "B. 握紧匕首和铁钳，先往有光/声的方向走", next: "p0_move" }
+      ]
+    },
+
+    p0_observe: {
+      chapter: "prologue",
+      title: "黑暗中的观察",
+      text: "你屏住呼吸，仔细听。除了那滴答声，远处隐约传来一阵有节奏的——脚步声？\n\n很慢，很沉，像是某种东西在拖着脚走路。方向似乎是从你右前方的黑暗里传来的，正在逐渐远离……\n\n另外，空气里除了腐臭味，还有一股淡淡的甜香。像是……新鲜的血。",
+      hints: ["脚步声正在远离——你可以选择跟上去或反方向走", "甜香的味道让人不安"],
+      grantItems: ["铁钳"],
+      choices: [
+        { text: "A. 向脚步声反方向摸索（可能是出路）", next: "p0_move" },
+        { text: "B. 跟上脚步声，看看是什么东西", next: "p0_follow" }
+      ]
+    },
+
+    p0_call_out: {
+      chapter: "prologue",
+      title: "呼喊",
+      text: "你大喊：「喂！有人吗？」\n\n声音在空旷的空间里回荡，没有人应答。\n\n但——滴答声……停了。\n\n远处的黑暗里，有什么东西也停了下来。你听到一阵极轻的摩擦声，像是指甲划过石头，越来越近……",
+      choices: [
+        { text: "A. 转身就跑", next: "p0_run" },
+        { text: "B. 握紧铁钳，准备迎战", next: "p0_fight", req: "铁钳" }
+      ]
+    },
+
+    p0_light: {
+      chapter: "prologue",
+      title: "微弱的光",
+      text: "火柴点燃。摇曳的光芒照亮了你所在的地方——一条长长的走廊，两侧是粗糙的石墙，天花板很高，有蝙蝠的阴影在扑腾。\n\n在走廊尽头，你看到了一扇巨大的铁门，门上刻着一行字：\n\n「生者止步，死者通行。」\n\n你的火柴烧到了手指，一阵刺痛——火焰灭了。但你已经记住了那个方向。",
+      choices: [
+        { text: "A. 向铁门方向走去", next: "c1_gate" },
+        { text: "B. 向相反方向探索", next: "p0_move" }
+      ]
+    },
+
+    p0_move: {
+      chapter: "prologue",
+      title: "摸索前行",
+      text: "你沿墙向前摸索。走了不知多久，手指触到了冰冷的金属——是一扇门。\n\n推开门的瞬间，一阵阴风扑面，带着血腥气。\n\n门后是一个宽敞的大厅，昏暗的烛光来自头顶——那里，倒挂着三具尸体，脖子上的血还在一滴一滴往下掉……\n\n滴答……滴答……滴答……\n\n你明白了，那声音不是水滴。",
+      choices: [
+        { text: "（踏入大厅……）", next: "c1_great_hall" }
+      ]
+    },
+
+    p0_follow: {
+      chapter: "prologue",
+      title: "追踪",
+      text: "你悄悄跟上。在黑暗中走了许久，那脚步声始终不紧不慢，保持着距离。\n\n突然，脚步声消失了。\n\n你停下，感觉有什么东西……就在你身后。\n\n缓慢地回头——\n\n黑暗中，一双苍白的眼睛正凝视着你。\n\n你甚至来不及发出声音，一只冰凉的手已经掐住了你的喉咙……",
+      ending: "bad",
+      endText: "你再次睁开眼，还是那张冰冷的石地。滴答声，铁锈味。仿佛什么都没发生过——或者说，已经发生过无数次了。"
+    },
+
+    p0_run: {
+      chapter: "prologue",
+      title: "奔跑",
+      text: "你没命地跑。黑暗中跌跌撞撞，不知撞翻了什么东西。\n\n前方突然出现一点微弱的光——是一扇虚掩的门，烛光从门缝里透出来。\n\n你冲进那光里，门在身后砰地关上了。你发现自己站在一个大厅里。",
+      choices: [
+        { text: "（喘息片刻，打量四周……）", next: "c1_great_hall" }
+      ]
+    },
+
+    p0_fight: {
+      chapter: "prologue",
+      title: "战斗",
+      text: "你举起铁钳。黑暗中，那东西越来越近，你终于看清——那是一个披着黑袍的人形，脸上没有五官，只有光滑的皮肤。\n\n你挥钳砸去，发出一声闷响——铁钳砸在了石壁上。那东西像烟雾一样从你指缝间飘了过去，冰凉的手指划过你的颈动脉。\n\n一阵剧痛——\n\n黑暗降临。\n\n……\n\n你再次睁开眼，还是那张冰冷的石地。",
+      ending: "bad",
+      endText: "这不是第一次。你隐约感觉到——你已经死过很多次了。但每一次醒来，你都会忘记之前的死。除了现在。这一次，你似乎……记得了什么。"
+    },
+
+    // ========== 第一章 ==========
+    c1_great_hall: {
+      chapter: "ch1",
+      title: "大厅",
+      text: "烛火摇曳，大厅里到处是暗红色的污渍。三具尸体无声地挂着，风一吹，身体就微微晃动。\n\n大厅四周有五扇门：\n\n**左边**——一扇木雕的房门，门上画着玫瑰图案；\n\n**右边**——一扇通往地下的楼梯口，黑暗幽深；\n\n**正前**——厚重的大门，铁锁从内扣住；\n\n**正前偏左**——一道铺着天鹅绒地毯的楼梯，通向二层；\n\n**你身后**——你来时的那扇铁门，此刻纹丝不动地锁上了。\n\n大厅中央的餐桌上，摆着还冒着热气的……食物？",
+      hints: ["大门被锁死了——你被困住了", "餐桌上有刚准备好的食物", "二层可能有更多秘密"],
+      choices: [
+        { text: "A. 先去看看餐桌上的食物", next: "c1_dining" },
+        { text: "B. 走左边那扇玫瑰门", next: "c1_rose_room" },
+        { text: "C. 下楼梯，去地下", next: "c1_basement_stairs" },
+        { text: "D. 上楼梯，去二层看看", next: "c1_upstairs" },
+        { text: "E. 试着撬开那扇锁着的大门", next: "c1_front_door" }
+      ]
+    },
+
+    c1_dining: {
+      chapter: "ch1",
+      title: "餐桌",
+      text: "你靠近餐桌——桌上铺着洁白的桌布，摆着银质餐具。食物还冒着热气：烤鹅、浓汤、红酒。\n\n但——烤鹅的眼睛在动。\n\n它的眼窝里，有两个黑色的小点正盯着你。\n\n你后退一步，碰到了桌角——桌布滑落，露出了下面被浸透的木板。暗红色的，黏腻的。而在桌布下面，你发现了一把**铜钥匙**。",
+      hints: ["烤鹅不对劲——不要吃任何东西", "铜钥匙可能能开某扇门"],
+      grantItems: ["铜钥匙"],
+      choices: [
+        { text: "A. 拿上钥匙，赶紧离开餐桌", next: "c1_great_hall" },
+        { text: "B. 用铁钳戳一下那只烤鹅", next: "c1_roast", req: "铁钳" },
+        { text: "C. 倒一点红酒闻闻看", next: "c1_wine" }
+      ],
+      variants: [
+        {
+          requireRevisit: true,
+          text: "你回到餐桌旁。桌布下的铜钥匙已经被你拿走了，桌角还在渗着那种暗红色的液体。\n\n烤鹅的眼睛依旧跟着你转，但你不想再碰这里的任何东西了。",
+          hints: [],
+          choices: [
+            { text: "（回到大厅……）", next: "c1_great_hall" }
+          ]
+        }
+      ]
+    },
+
+    c1_roast: {
+      chapter: "ch1",
+      title: "烤鹅",
+      text: "你用铁钳猛地戳进烤鹅的肚子。\n\n噗——一股黑色的液体喷了出来，溅在你的手上。那烤鹅发出一声尖锐的怪叫，翅膀扑腾着飞了起来，撞在天花板上挂着的尸体上，吓得它们也轻轻摇晃。\n\n你看清了——那根本不是什么烤鹅，而是一只被剥了皮的蝙蝠？还是某种你从未见过的生物？\n\n但你现在手里多了一样东西——从它肚子里掉出来的一颗**红色宝石**。",
+      grantItems: ["铜钥匙", "红宝石"],
+      choices: [
+        { text: "（赶紧离开餐桌……）", next: "c1_great_hall" }
+      ],
+      variants: [
+        {
+          requireRevisit: true,
+          text: "餐桌上只剩下那只被戳穿的烤鹅——它已经不动了，黑色的液体流满了桌布。\n\n红宝石在你口袋里。这里没什么可做的了。",
+          hints: [],
+          choices: [
+            { text: "（回到大厅……）", next: "c1_great_hall" }
+          ]
+        }
+      ]
+    },
+
+    c1_wine: {
+      chapter: "ch1",
+      title: "红酒",
+      text: "你凑近闻——不是红酒。是血。真正的人类血液，还带着温度。\n\n你反胃地后退。但在酒杯底部，你看到一个小小的金属环？用手指捞出来——是一枚刻着「EL」两个字母的**银戒指**。",
+      grantItems: ["铜钥匙", "银戒指(EL)"],
+      choices: [
+        { text: "（别碰桌上的东西了，赶紧离开……）", next: "c1_great_hall" }
+      ],
+      variants: [
+        {
+          requireRevisit: true,
+          text: "酒杯已经空了，杯底什么也没有。那枚刻着「EL」的银戒指在你口袋里。\n\n你不想再碰这张桌子上的任何东西。",
+          hints: [],
+          choices: [
+            { text: "（回到大厅……）", next: "c1_great_hall" }
+          ]
+        }
+      ]
+    },
+
+    c1_rose_room: {
+      chapter: "ch1",
+      title: "玫瑰房",
+      text: "推开门，一股甜腻的香味扑面而来。这是一个小餐厅，墙上挂满了玫瑰图案的壁画。\n\n但——那些玫瑰是活的。血红色的藤蔓爬满了墙壁、天花板，甚至缠绕在吊灯上。花瓣在烛光下微微颤动，仿佛在呼吸。\n\n房间中央坐着一个穿**红衣的女人**。她背对着你，长发垂到腰际，正在用一把银叉慢慢叉着什么东西吃。\n\n你想起了那张纸条上的话：**不要相信穿红衣的女人**。",
+      hints: ["纸条警告过红衣女人", "银匕首可能有用"],
+      choices: [
+        { text: "A. 悄悄退出去，不要出声", next: "c1_retreat_quietly" },
+        { text: "B. 硬着头皮上前搭话", next: "c1_talk_red" },
+        { text: "C. 握紧银匕首，绕到她身后", next: "c1_approach_dagger", req: "银匕首" }
+      ],
+      variants: [
+        {
+          requireItem: "红女之信",
+          text: "你推开门，玫瑰藤蔓已经全部枯萎了，但房间并不阴森——桌上的烛台被重新点燃，红衣女人坐在原来的位置上，看见你时抬起了头。\n\n那双原本全是黑色的眼睛，现在有了正常的瞳孔。\n\n「你还记得我。」她说，语气平静得像个普通的女人，「这在这里是很少见的事。」\n\n她抬起手，一枚玫瑰形状的钥匙从她指间浮现，落在桌面上。\n\n「拿去吧。地下室的门，只有它能开。」\n\n「下去之后……别恨他。他只是不肯承认，人死了就该走。」",
+          hints: [],
+          choices: [
+            { text: "A. 拿起玫瑰钥匙，去地下室", next: "c1_rose_key_gift" },
+            { text: "B. 先在大厅里再找找", next: "c1_great_hall" }
+          ]
+        },
+        {
+          requireItem: "红女已消散",
+          text: "玫瑰房的门自己开了。\n\n里面没有女人，也没有那种甜腻的香味了——只有满地干枯的花瓣，和一屋子空荡荡的寂静。\n\n她真的不在了。这一次，是彻底的。\n\n房间中央的地板上，躺着一枚玫瑰形状的钥匙，在灰尘里泛着冷光。",
+          hints: [],
+          choices: [
+            { text: "A. 捡起地上的玫瑰钥匙", next: "c1_rose_key_pickup" },
+            { text: "B. 什么都别碰，回大厅", next: "c1_great_hall" }
+          ]
+        },
+        {
+          requireItem: "铜牌(名字线索)",
+          text: "推开门，一股甜腻的香味扑面而来。墙上血红色的藤蔓还在微微颤动。\n\n房间中央坐着一个穿**红衣的女人**，背对着你，长发垂到腰际，正在用一把银叉慢慢叉着什么东西吃。\n\n你认得那个背影——三楼镜子里就是这张脸。刚才在镜子前，她对你说了名字和石板的线索；现在，她坐在一楼的餐桌前，像什么都不记得。\n\n或者说，她记得，只是不想在这里承认。",
+          hints: ["三楼那个她和眼前这个她，是同一个", "她背对着你，看不出现在有没有恶意"],
+          choices: [
+            { text: "A. 悄悄退出去，不要出声", next: "c1_retreat_quietly" },
+            { text: "B. 走上前，试着叫她的名字：伊丽莎白", next: "c1_call_liz" },
+            { text: "C. 握紧银匕首，绕到她身后", next: "c1_approach_dagger", req: "银匕首" }
+          ]
+        },
+        {
+          requireItem: "铜牌(残缺)",
+          text: "推开门，一股甜腻的香味扑面而来。墙上血红色的藤蔓还在微微颤动。\n\n房间中央坐着一个穿**红衣的女人**，背对着你，长发垂到腰际，正在用一把银叉慢慢叉着什么东西吃。\n\n这张脸你见过——在镜子里，在你举起银十字架的那一刻。原来这里站着的，也是她。",
+          hints: ["三楼那个她和眼前这个她，是同一个", "她背对着你，看不出现在有没有恶意"],
+          choices: [
+            { text: "A. 悄悄退出去，不要出声", next: "c1_retreat_quietly" },
+            { text: "B. 硬着头皮上前搭话", next: "c1_talk_red" },
+            { text: "C. 握紧银匕首，绕到她身后", next: "c1_approach_dagger", req: "银匕首" }
+          ]
+        },
+        {
+          requireItem: "玫瑰钥匙",
+          text: "玫瑰房的门半开着。里面的玫瑰藤蔓已经全部枯萎，地上铺满了干掉的红花瓣——那个穿红衣的女人不见了。\n\n房间空得让人心里发慌。",
+          hints: [],
+          choices: [
+            { text: "（回到大厅……）", next: "c1_great_hall" }
+          ]
+        }
+      ]
+    },
+
+    c1_rose_key_pickup: {
+      chapter: "ch1",
+      title: "地上的钥匙",
+      text: "你蹲下身，把那枚玫瑰形状的钥匙捡起来。它比看上去要沉，边缘有些发黑，像是被火燎过。\n\n指尖触到它的瞬间，你听见一声很轻的叹息——从房间的某个角落传来，然后散了。\n\n「去吧。」像是她最后说的话，「下面还有一个人在等你。」",
+      grantItems: ["玫瑰钥匙"],
+      choices: [
+        { text: "A. 直接下地下室", next: "c1_basement_stairs" },
+        { text: "B. 先回大厅", next: "c1_great_hall" }
+      ]
+    },
+
+    c1_rose_key_gift: {
+      chapter: "ch1",
+      title: "她的钥匙",
+      text: "你伸手拿起桌上的钥匙。它比看上去要沉，掌心里却带着一点温度。\n\n她看着你，第一次露出像活人的表情——有点疲惫，也有点释然。\n\n「我在这里等了太久，久到忘了自己在等谁。谢谢你让我想起来。」\n\n「地下室的门只有这把钥匙能开。下去以后……」她顿了一下，「如果他还认得我，就告诉他，我不怪他。」\n\n你走出玫瑰房时，身后的藤蔓落下了最后一片花瓣。",
+      grantItems: ["玫瑰钥匙"],
+      choices: [
+        { text: "A. 直接下地下室", next: "c1_basement_stairs" },
+        { text: "B. 先回大厅", next: "c1_great_hall" }
+      ]
+    },
+
+    c1_retreat_quietly: {
+      chapter: "ch1",
+      title: "悄然撤退",
+      text: "你屏住呼吸，悄悄后退。玫瑰花瓣微微转动，似乎在追踪你的气息——但你还是成功溜了出去。\n\n关上门的瞬间，你听到身后传来女人的轻声：\n\n「跑吧。趁你还能跑。」\n\n你后背一阵发凉。她知道你在那里。\n\n退到门框边时，你的脚踢到了什么硬东西——低头一看，是一把生锈的**铁钥匙**，像是被谁匆忙丢在这里的。",
+      grantItems: ["铁钥匙"],
+      choices: [
+        { text: "（回到大厅，探索其他地方……）", next: "c1_great_hall" }
+      ]
+    },
+
+    c1_call_liz: {
+      chapter: "ch1",
+      title: "叫出名字",
+      text: "「伊丽莎白。」你叫了一声。\n\n银叉停在半空中。\n\n她没有立刻转身，肩膀却先抖了一下——像是已经很久没有人这样叫过她了。\n\n「这个名字……你从哪里听来的？」她终于转过身。那双全是黑色的眼睛，正在慢慢变得清澈，瞳孔一点点浮现出来，「他从不叫我的名字。他只叫我『留下的人』。」\n\n她放下银叉，看你的眼神里第一次没有了食欲，只有一种很深的疲惫。\n\n「你不怕我。」\n\n「我见过你。」你说，「在三楼的镜子里。你告诉了我石板的线索。」\n\n她怔住了，然后笑了一下——那个笑很短，但确实是在笑。",
+      grantItems: ["红女之信"],
+      choices: [
+        { text: "A. 开口向她讨要地下室的钥匙", next: "c1_rose_key_gift" },
+        { text: "B. 先退出去，让她自己静一会儿", next: "c1_great_hall" }
+      ]
+    },
+
+    c1_talk_red: {
+      chapter: "ch1",
+      title: "搭话",
+      text: "你鼓起勇气：「你……你好？你是这里的主人吗？」\n\n女人缓缓转过头——\n\n你险些叫出声来。她有一张极其美丽的脸，但她的眼睛是完全的黑色。没有眼白，没有瞳孔，只有无尽的黑暗。\n\n「主人？」她笑了，声音像金属摩擦，「我是这座古堡的……食物。每一个来到这里的人，都是我的食物。」\n\n她站起身，红衣像血一样流淌。你想跑，但腿已经软了。",
+      ending: "bad",
+      endText: "你被她轻轻拥入怀中。她的牙齿刺入你的脖颈，冰凉，尖锐。在意识消失前，你听到她在你耳边低语：「不要忘记……不要忘记……」"
+    },
+
+    c1_approach_dagger: {
+      chapter: "ch1",
+      title: "绕后",
+      text: "你握紧银匕首，沿着墙边绕到她身后。就在你举起匕首的瞬间，她也站了起来——根本没有转身。\n\n「银……」她叹了口气，声音里有一丝意外，也有一丝释然？\n\n「原来如此。是他派你来的吗？」\n\n你愣住了。她没有攻击你，只是侧过脸，让你看到她脖子上——一道还在渗血的伤口。\n\n「杀了我吧，」她轻声说，「我已经被困在这里……太久太久了。」\n\n你举起匕首，刺了下去。",
+      grantItems: ["伊丽莎白的眼泪", "红女已消散"],
+      choices: [
+        { text: "（她化作漫天的红玫瑰花瓣，一枚钥匙掉落在地……）", next: "c1_rose_gift" }
+      ]
+    },
+
+    c1_rose_gift: {
+      chapter: "ch1",
+      title: "玫瑰钥匙",
+      text: "你捡起那枚钥匙——它是玫瑰形状的，冰冷刺骨。\n\n女人最后的声音在空气中回荡：\n\n「去地下室……找到刻着名字的石板……那是解开一切的关键……」\n\n「他还在那里……他一直在那里……」\n\n红色的花瓣消散殆尽，玫瑰藤蔓也枯萎消失了。",
+      grantItems: ["玫瑰钥匙"],
+      choices: [
+        { text: "（回到大厅，下地下室……）", next: "c1_basement_stairs" }
+      ]
+    },
+
+    c1_basement_stairs: {
+      chapter: "ch1",
+      title: "楼梯",
+      text: "你沿楼梯下行。每走一步，温度就下降一度。很快，你能看到自己呼出的白气。\n\n楼梯两侧的墙上，每隔几步就有一个铁笼子，笼子里……是空的？不，仔细看，笼底堆着干枯的骸骨。小动物的，也有人类的。\n\n楼梯尽头是一扇大铁门，门上有一个方形的锁孔——玫瑰形状的。\n\n你需要一把玫瑰钥匙。",
+      hints: ["需要玫瑰钥匙才能开门"],
+      choices: [
+        { text: "A. 用玫瑰钥匙开门", next: "c4_dungeon_entrance", req: "玫瑰钥匙" },
+        { text: "B. 回到大厅，找钥匙", next: "c1_great_hall" }
+      ]
+    },
+
+    c1_front_door: {
+      chapter: "ch1",
+      title: "大门",
+      text: "你凑近锁孔——锁非常古老，是黄铜的，造型精致。\n\n你试着用铜钥匙……咔哒。锁开了。\n\n你深吸一口气，推开大门——\n\n门外是一座美丽的花园，月光洒在花丛上，空气清新。\n\n你迈出一步——\n\n脚下突然踩空。你向下坠落，坠落，坠落——\n\n然后重重地摔回了……那条冰冷的石地走廊里。滴答声，铁锈味。\n\n你又回来了。大门……从来就不存在。那只是某种幻象。",
+      ending: "loop",
+      endText: "你隐约记起——这不是你第一次试图推开那扇门。你需要找到真正的出路。而不是某个诱惑你的幻象。"
+    },
+
+    c1_gate: {
+      chapter: "ch1",
+      title: "大门",
+      text: "你推开门——门后是一条长长的走廊，两侧挂满了油画。画框里是不同年代的人，穿着不同的衣服。走廊尽头有另一扇门，门缝里透出烛光。你走了过去。",
+      choices: [
+        { text: "（推开门……）", next: "c1_great_hall" }
+      ]
+    },
+
+    // ========== 第二章 ==========
+    c1_upstairs: {
+      chapter: "ch2",
+      title: "楼梯",
+      text: "你爬上铺着天鹅绒地毯的楼梯，来到了古堡的二层。\n\n二层是一条长长的回廊，两侧有一排高大的落地拱窗。窗外是无尽的黑暗——没有月亮，没有星星。\n\n回廊中间有三扇门：\n\n**左边**——一扇精致的木门，上面刻着书籍和羽毛笔的图案；\n\n**中间**——一扇铁门，上面挂满了生锈的锁；\n\n**右边**——一扇半掩的玻璃窗，窗外……隐约有塔尖的轮廓。\n\n回廊尽头还有一道更窄的楼梯，往上通进黑暗里——没有地图的话，你根本猜不到它通向哪一层。",
+      hints: ["左边应该是书房", "中间铁门挂满锁——可能有重要的东西", "右边通往钟楼"],
+      choices: [
+        { text: "A. 进左边的书房", next: "c2_study" },
+        { text: "B. 研究那扇挂满锁的铁门", next: "c2_locked_door" },
+        { text: "C. 从右边窗户爬出去", next: "c2_tower" },
+        { text: "D. 照着古堡地图，走另一道楼梯上三层", next: "c3_bedroom", req: "古堡地图" },
+        { text: "E. 下楼，回一层大厅", next: "c1_great_hall" }
+      ]
+    },
+
+    c2_study: {
+      chapter: "ch2",
+      title: "书房",
+      text: "书房里堆满了书，灰尘很厚。空气里有一股陈旧的油墨味。\n\n你在书海中翻找——大部分书都变成了碎纸或空白页。但你在一个暗格里找到了几本还保存完好的。\n\n其中一本日记的封面上写着：**埃尔文·勒罗伊 1847-1893**。\n\n翻开日记——第一页是一行血红色的字：\n\n「如果你看到这本日记，说明你已经被困住了。你和我一样。你和之前的每一个人一样。」\n\n「听我说——他的名字刻在地下室的石板上。找到它，念出来。」\n\n「念出来，他就会放过你。或者……他会让你加入我们。」\n\n日记最后一页夹着一张对折的**古堡地图**——上面画着整座宅子的结构：一层大厅、二层回廊、三层密室，以及地下的石牢。",
+      hints: ["「他」是谁？刻在地下室石板上的名字", "日记的主人埃尔文·勒罗伊", "地图上还标着第三层"],
+      grantItems: ["埃尔文的日记", "古堡地图"],
+      choices: [
+        { text: "A. 带上日记和地图，赶紧去地下室", next: "c1_basement_stairs" },
+        { text: "B. 继续在书房找找有没有别的线索", next: "c2_study_hunt" },
+        { text: "C. 顺着地图的指引，去第三层看看", next: "c3_bedroom" },
+        { text: "D. 回到二楼走廊", next: "c1_upstairs" }
+      ],
+      variants: [
+        {
+          requireRevisit: true,
+          text: "书房里还是那几排积尘的书架。日记和地图已经在你手里了，剩下的全是碎纸和空白页。\n\n这里已经没有什么值得探索的了。",
+          hints: [],
+          choices: [
+            { text: "A. 顺着地图的指引，去第三层看看", next: "c3_bedroom" },
+            { text: "B. 直接去地下室", next: "c1_basement_stairs" },
+            { text: "C. 回到二楼走廊", next: "c1_upstairs" }
+          ]
+        }
+      ]
+    },
+
+    c2_study_hunt: {
+      chapter: "ch2",
+      title: "深翻",
+      text: "你继续翻。在壁炉后面，你摸到了一个暗格——里面有一个小木盒，还有半张破旧的照片。\n\n照片上是一群穿着旧式服装的人，站在古堡大门前。一共六个人，每个人的脸上都用红笔打了个叉。只有一个人没有——一个站在最边上的小男孩，手里握着一本书。\n\n照片背面写着：「1860年，最后的聚会。从那以后，再没有人走出去过。」\n\n小盒子里是一枚微型的**银十字架**。",
+      hints: ["1860年的聚会出了什么事？", "银十字架——又一个驱邪的东西"],
+      grantItems: ["埃尔文的日记", "古堡地图", "银十字架"],
+      choices: [
+        { text: "A. 顺着地图的指引，去第三层看看", next: "c3_bedroom" },
+        { text: "B. 去地下室", next: "c1_basement_stairs" },
+        { text: "C. 回到二楼走廊", next: "c1_upstairs" }
+      ],
+      variants: [
+        {
+          requireRevisit: true,
+          text: "壁炉后面的暗格已经空了——木盒、照片、银十字架都在你身上。\n\n这个房间能翻的地方你都翻遍了，剩下的只有飘在烛光里的灰尘。",
+          hints: [],
+          choices: [
+            { text: "A. 顺着地图的指引，去第三层看看", next: "c3_bedroom" },
+            { text: "B. 去地下室", next: "c1_basement_stairs" },
+            { text: "C. 回到二楼走廊", next: "c1_upstairs" }
+          ]
+        }
+      ]
+    },
+
+    c2_locked_door: {
+      chapter: "ch2",
+      title: "铁锁之门",
+      text: "你凑近铁门。上面挂着至少二十把不同大小的铁锁。\n\n仔细看——每把锁上都刻着一个年份：1851、1853、1855……\n\n1860年之后就没有了。最中间是一把最大的锁，上面刻着一个字：**「等」**。\n\n这扇门……需要等什么？还是需要用什么特定的东西才能打开？\n\n你盯着那把最大的锁——锁孔里隐约透出一点红色的微光，像是在呼唤着什么。",
+      hints: ["年份停在1860——那个关键年份", "最中间的锁刻着「等」", "锁孔的红光……红宝石？"],
+      choices: [
+        { text: "A. 先不管它，回头看看别的地方", next: "c1_upstairs" },
+        { text: "B. 用铜钥匙试试", next: "c2_try_key", req: "铜钥匙" },
+        { text: "C. 用铁钥匙试试", next: "c2_iron_key", req: "铁钥匙" },
+        { text: "D. 把红宝石嵌进中间那把大锁的锁孔", next: "c2_ruby_door", req: "红宝石" }
+      ],
+      variants: [
+        {
+          requireItem: "男式黑礼服",
+          text: "那扇挂满锁的铁门已经被你打开了。锁全掉在地上，门敞开着，后面就是那间属于主人的房间。",
+          hints: [],
+          choices: [
+            { text: "A. 再进去看看那间私人房间", next: "c2_ruby_door" },
+            { text: "B. 回到二楼走廊", next: "c1_upstairs" }
+          ]
+        }
+      ]
+    },
+
+    c2_ruby_door: {
+      chapter: "ch2",
+      title: "红宝石",
+      text: "你把红宝石按进中间那把大锁——咔哒！红宝石完美地嵌了进去，像是为它量身定做的。\n\n红光从锁里扩散开来，蔓延到所有小锁上。二十多把锁同时发出咔哒声，一把接一把地自动弹开，掉在地上叮当作响。\n\n铁门缓缓打开。\n\n门后是一间布满灰尘的书房——不，比书房更私密。墙上挂着肖像画，画里是一个穿着黑衣的男人和他的家人。壁炉上摆着一排旧照片，和……一本日记？\n\n最让你震惊的是：桌子上放着一件叠得整整齐齐的**男式黑色礼服**，和墙上画里那个男人穿的一模一样。\n\n而礼服的胸口，绣着两个字母：**「E·L」**。\n\nEDMUND·勒罗伊。",
+      grantItems: ["EDMUND的私人日记", "男式黑礼服"],
+      hints: ["这间房是EDMUND的私人房间", "黑礼服上的 E·L 就是 EDMUND LEROY", "现在你知道主人的名字了"],
+      choices: [
+        { text: "A. 翻翻他的私人日记", next: "c2_read_edmund_diary" },
+        { text: "B. 先离开，去地下室找那个男人", next: "c1_basement_stairs" },
+        { text: "C. 回到二楼走廊", next: "c1_upstairs" }
+      ],
+      variants: [
+        {
+          requireRevisit: true,
+          text: "你再一次走进这间属于主人的房间。礼服已经不在桌上——它在你手里。日记也翻过了，剩下的只是一屋子的旧家具和灰尘。\n\n这里没有什么可再翻的了。",
+          hints: [],
+          choices: [
+            { text: "A. 再去看看那本日记", next: "c2_read_edmund_diary" },
+            { text: "B. 直接去地下室", next: "c1_basement_stairs" },
+            { text: "C. 回到二楼走廊", next: "c1_upstairs" }
+          ]
+        }
+      ]
+    },
+
+    c2_read_edmund_diary: {
+      chapter: "ch2",
+      title: "EDMUND的日记",
+      text: "日记已经泛黄，字迹却清晰——因为它不是用墨水写的，而是用……别的什么。\n\n「1860年冬天，瘟疫带走了我的妻子、我的三个孩子、我的仆人共十二人。我是唯一的幸存者。\n\n我花了三十年研究这个仪式。书上说，用自己的灵魂做引子，可以把已死之人的灵魂困在某个地方，让他们不会消散。\n\n我成功了。但他们没有活过来。他们变成了这里的一部分，和我一起。\n\n我以为我会很孤独。直到后来有访客走进来。\n\n他们死了。但他们的灵魂也留了下来。\n\n我……我不是故意的。我不知道怎么让他们走。\n\n也许……只要有人能念出我的名字，打破这个循环……\n\n如果有一天你看到这个日记——求你。念出我的名字。\n\n名字是：EDMUND。」",
+      grantItems: ["EDMUND的私人日记(读完)"],
+      hints: ["现在你知道了EDMUND的真实名字", "他不是坏人，他只是不知道怎么放手"],
+      choices: [
+        { text: "A. 赶紧去地下室", next: "c1_basement_stairs" },
+        { text: "B. 回到二楼走廊", next: "c1_upstairs" }
+      ]
+    },
+
+    c2_try_key: {
+      chapter: "ch2",
+      title: "钥匙不合",
+      text: "你用钥匙一把一把试过去——没有一把对得上。锁孔早就锈死了，像是几十年没有人动过。\n\n这些锁也不是普通的锁：每一把上面都刻着一个年份。你把它们挨个看完，年份停在1860年，之后就再也没有了。\n\n最中间那把最大的锁上刻着一个字：**「等」**。\n\n它到底在等什么？",
+      choices: [
+        { text: "A. 换一样东西再试一次", next: "c2_locked_door" },
+        { text: "B. 先去别的房间看看", next: "c1_upstairs" }
+      ],
+      variants: [
+        {
+          requireItem: "埃尔文的日记",
+          text: "你用钥匙一把一把试过去——打不开。锁孔全锈死了。\n\n但你看着那把最大的锁，想起了日记的封面：**埃尔文·勒罗伊 1847-1893**。\n\n1860年之后就没有新的锁了。1860年的人，就是那个小男孩埃尔文——他是最后一个被关在这里的。这扇门，是不是在等有人想起他？",
+          hints: ["年份停在1860——和埃尔文有关", "锁孔里的红光……也许红宝石才是关键"],
+          choices: [
+            { text: "A. 换一样东西再试一次", next: "c2_locked_door" },
+            { text: "B. 去看看右边那扇窗户", next: "c2_tower" }
+          ]
+        }
+      ]
+    },
+
+    c2_iron_key: {
+      chapter: "ch2",
+      title: "铁钥匙",
+      text: "铁钥匙插进1851年那把最小的锁——咔。它开了。\n\n锁掉在地上，锁芯里滑出一张折得很小的纸片，纸已经很脆了。展开后，是一个陌生人的字迹：\n\n「给后来的人：\n\n我叫约瑟夫，1912年冬天走进这座宅子躲雨。今天是第十一天，门不开。\n\n这些锁是我自己加上去的。每过一天，我就挂一把新的，我想记住自己已经在这里等了多久。现在我也不知道自己挂了多少把了。\n\n别像我一样只知道等。我等到第七天的时候，那个东西就开始在走廊尽头叫我的名字了——它叫得很温柔，像是我母亲的声音。\n\n后来的人，如果你看到这张纸——去书房，那里的日记会告诉你他是谁；去地下室，石板上有他的名字；别在任何一个房间停留超过一个晚上。你还有时间。我没有了。\n\n（最后一行的字迹已经散开，像是被水浸过。）」\n\n纸片里还包着一枚磨得发亮的黄铜片，上面刻着一个字母：**E**。",
+      grantItems: ["老访客的遗书"],
+      hints: ["这扇门不是被谁锁住的，是访客们自己加的锁", "遗书说：去书房、去地下室，别停下", "铜片上的「E」——名字的第一个字母？"],
+      choices: [
+        { text: "A. 回到那扇铁门前", next: "c2_locked_door" },
+        { text: "B. 回到二楼走廊", next: "c1_upstairs" }
+      ],
+      variants: [
+        {
+          requireItem: "老访客的遗书",
+          text: "1851年那把锁已经开着，里面空了——纸片在你口袋里。\n\n你又把它读了一遍，那行字还清楚着：\n\n「别像我一样只知道等。去书房，那里的日记会告诉你他是谁；去地下室，石板上有他的名字。」\n\n其余的锁依旧纹丝不动，最中间那把刻着「等」的大锁，还是打不开。",
+          hints: ["去书房找日记", "去地下室找石板"],
+          choices: [
+            { text: "A. 回到二楼走廊", next: "c1_upstairs" }
+          ]
+        }
+      ]
+    },
+
+    c2_tower: {
+      chapter: "ch2",
+      title: "钟楼",
+      text: "你推开那扇半掩的窗，沿着一条狭窄的石廊爬到了钟楼顶端。\n\n巨大的齿轮静止不动，但钟面上的指针——在走。\n\n滴答……滴答……滴答……\n\n那不是钟表的声音。你终于认出了那个声音。那是——**你自己的心跳声**。\n\n你低头看自己的胸口——一片血迹正在蔓延。\n\n然后你低头看钟楼下方——古堡的院子里，站着一个人影，正抬头看你。\n\n那个人影……是你自己。",
+      ending: "bad",
+      endText: "你想起了纸条上的话：「如果你看到自己——跑。」但已经太晚了。你脚下一滑，从钟楼上掉了下去。"
+    },
+
+    // ========== 第三章 ==========
+    c3_bedroom: {
+      chapter: "ch3",
+      title: "第三层",
+      text: "你沿着书房里找到的地图继续探索——古堡比你想象的要大。\n\n第三层几乎全是卧室。你推开一扇又一扇门，每一间卧室都空着，除了灰尘和蛛网。\n\n直到你推开最深处那扇没锁的门——\n\n这是一间布置精致的闺房。墙上挂着红玫瑰窗帘，床上铺着丝绒被褥。梳妆台上摆着梳子和……\n\n一张还带着余温的纸条：\n\n「亲爱的，我知道你会回来的。\n\n我等了你很久。\n\n——伊丽莎白」\n\n梳妆台的镜子里，一个穿红裙的女人正缓缓转过头来——",
+      hints: ["伊丽莎白——红衣女人的名字？"],
+      choices: [
+        { text: "A. 转身就跑", next: "c3_run" },
+        { text: "B. 握紧银匕首面对她", next: "c3_face_liz", req: "银匕首" },
+        { text: "C. 用银十字架对着镜子", next: "c3_cross_liz", req: "银十字架" },
+        { text: "D. 把刻着「EL」的银戒指递给她看", next: "c3_ring_liz", req: "银戒指(EL)" },
+        { text: "E. 悄悄退回二楼走廊", next: "c1_upstairs" }
+      ],
+      variants: [
+        {
+          requireItem: "红女已消散",
+          text: "你推开那扇没锁的门。这一次，梳妆台的镜子里什么都没有——只有你自己的影子。\n\n镜面上有一道没见过的裂痕，从左上角一直裂到镜心，像是被什么力量从里面撞开的。\n\n梳妆台上没有纸条，只剩一层灰。她走了，你不知道她去了哪儿，也不知道她还会不会回来。",
+          hints: [],
+          choices: [
+            { text: "A. 回到二楼走廊", next: "c1_upstairs" },
+            { text: "B. 去地下室", next: "c1_basement_stairs" }
+          ]
+        },
+        {
+          requireItem: "红女之信",
+          text: "你再一次推开这扇门。镜子里的伊丽莎白坐在梳妆台前，安静地梳着长发——眼睛是正常的，瞳孔清晰。\n\n「又来啦。」她笑了一下，语气轻得像在说天气，「这里已经没什么能给你的了。」\n\n她把梳子放下，没再多说。镜面平静得像水面，映着你和她。",
+          hints: [],
+          choices: [
+            { text: "A. 回到二楼走廊", next: "c1_upstairs" },
+            { text: "B. 直接去地下室", next: "c1_basement_stairs" }
+          ]
+        },
+        {
+          requireItem: "铜牌(名字线索)",
+          text: "你再一次推开这扇门。镜子里的伊丽莎白还是那个疲惫的样子，看见你只是轻轻摇头：\n\n「该说的我都说了。名字在地下室的石板上——去把它念出来吧，别在楼上耗着。」\n\n镜面暗了下去，像一层结了霜的玻璃。",
+          hints: [],
+          choices: [
+            { text: "A. 去地下室", next: "c1_basement_stairs" },
+            { text: "B. 回到二楼走廊", next: "c1_upstairs" }
+          ]
+        },
+        {
+          requireItem: "铜牌(残缺)",
+          text: "你再一次推开这扇门。镜子里空空的，只有一道裂口——十字架伤到的不只是她，还有这面镜子。\n\n梳妆台上那堆灰里，再也挑不出什么有用的东西了。",
+          hints: [],
+          choices: [
+            { text: "A. 去地下室", next: "c1_basement_stairs" },
+            { text: "B. 回到二楼走廊", next: "c1_upstairs" }
+          ]
+        },
+        {
+          requireItem: "伊丽莎白的眼泪",
+          text: "你再一次推开这扇门。闺房里一片死寂，镜子碎了一角，镜面上再也没有那个穿红裙的影子。\n\n梳妆台上的纸条不见了，只剩下一层灰。",
+          hints: [],
+          choices: [
+            { text: "A. 回到二楼走廊", next: "c1_upstairs" },
+            { text: "B. 去地下室", next: "c1_basement_stairs" }
+          ]
+        }
+      ]
+    },
+
+    c3_ring_liz: {
+      chapter: "ch3",
+      title: "银戒指",
+      text: "你没有退后。你从口袋里掏出那枚从酒杯底部捞到的银戒指——刻着「EL」两个字母——对着镜子举了起来。\n\n伊丽莎白的动作突然僵住了。\n\n她的手指缓缓抚过戒指上的字母，嘴唇微微颤抖。\n\n「这是……他给我的。1858年……我们订婚的那天……」\n\n她黑衣下的影子流出眼泪，穿透了镜子，落在你的手心里——是温热的。\n\n「我以为……我以为永远不会有人记得我。」\n\n她抬起眼睛，那里面第一次有了光。\n\n「原来还有人记得我们订过婚。原来我还会哭。」\n\n这一次，她没有递铜片给你，而是从镜子里伸出握着两样东西的手：**一枚铜牌（完整的）**，和一个小小的玻璃瓶——\n\n「这是我自己的眼泪。如果到最后你需要和他谈判……他……他还爱着我。也许我的眼泪能让他心软一下。」\n\n镜面重新平静下来。她没有再说话，只是安静地看着你，像在等你自己做决定。",
+      grantItems: ["铜牌(完整)", "伊丽莎白的眼泪", "红女之信"],
+      hints: ["拿到了完整的铜牌——上面写着完整的名字", "「伊丽莎白的眼泪」——在终章EDMUND面前用"],
+      choices: [
+        { text: "A. 转身离开这间闺房", next: "c1_upstairs" },
+        { text: "B. 直接下楼去地下室", next: "c1_basement_stairs" }
+      ]
+    },
+
+    c3_run: {
+      chapter: "ch3",
+      title: "逃跑",
+      text: "你转身冲出房间。身后传来一声轻柔的叹息：\n\n「你和他们都一样……不敢面对。」\n\n你不知道跑了多远，直到撞在墙上停下。你发现自己又回到了那条冰冷的走廊里。\n\n滴答声。铁锈味。你又开始了。但这一次，你记得更多了。伊丽莎白。埃尔文。1860年。地下室。你一定要把事情弄清楚。",
+      ending: "loop",
+      endText: "新一轮轮回。但你的记忆保留了下来。这一次，你知道了她的名字——伊丽莎白。"
+    },
+
+    c3_face_liz: {
+      chapter: "ch3",
+      title: "面对",
+      text: "你举起银匕首，没有退。\n\n镜中的伊丽莎白笑了，笑容很疲惫：\n\n「又一个拿银器的人。上次那个用它杀了我。结果呢？他也没能出去。」\n\n「我不是要杀你，」你说，「我想知道怎么出去。」\n\n她愣了一下。\n\n「你……想出去？所有人都想出去。但他不让我们走。他是这座古堡的……主人。1860年那个夜晚，他把所有人都变成了他的一部分。」\n\n「他的名字……刻在地下室的石板上。你得念出来。念对了，他才会放你走。」\n\n她从镜子里伸手出来，递过一枚小小的**铜牌**。\n\n「这是埃尔文留下的。上面有他说过的线索。去地下室吧。」\n\n镜中的她，第一次没有笑。",
+      grantItems: ["铜牌(名字线索)"],
+      hints: ["主人的名字在地下室石板上", "铜牌是线索"],
+      choices: [
+        { text: "A. 感谢她，去地下室", next: "c1_basement_stairs" },
+        { text: "B. 回到二楼走廊", next: "c1_upstairs" }
+      ]
+    },
+
+    c3_cross_liz: {
+      chapter: "ch3",
+      title: "十字架",
+      text: "你举起银十字架对着镜子。十字架在黑暗中微微发光。\n\n伊丽莎白后退了一步，脸上闪过一丝痛苦：\n\n「你……用这个……不，不要伤害我！我不是他！我只是……只是被他困在这里的！」\n\n她捂着脸，从镜子里消失了。镜面上留下一道从里向外撞开的裂痕，梳妆台上的纸条也化为了灰烬。\n\n但你在灰烬里发现了一枚小小的**铜牌**，上面的字被烧掉了一半。\n\n房间里忽然安静得可怕。你握着那半枚铜牌，只剩一个问题：她到底是谁？",
+      grantItems: ["铜牌(残缺)", "红女已消散"],
+      hints: ["她消散了，什么也没来得及说", "残牌上的字看不清"],
+      choices: [
+        { text: "A. 离开这间闺房，回二楼走廊", next: "c1_upstairs" },
+        { text: "B. 直接下楼去地下室", next: "c1_basement_stairs" }
+      ]
+    },
+
+    // ========== 第四章 ==========
+    c4_dungeon_entrance: {
+      chapter: "ch4",
+      title: "地牢入口",
+      text: "玫瑰钥匙转动，铁门吱呀一声打开了。一股刺骨的冷气涌上来，带着浓烈的血腥气和……某种更古老、更腐朽的味道。楼梯向下延伸到看不见尽头的黑暗里。\n\n你深吸一口气，迈出了第一步。",
+      choices: [
+        { text: "（继续深入……）", next: "c4_dungeon" }
+      ]
+    },
+
+    c4_dungeon: {
+      chapter: "ch4",
+      title: "地牢",
+      text: "地牢比你想象的要大得多。两边排列着石牢，很多牢门已经开了——里面空空如也，或只剩白骨。\n\n在走廊尽头，你看到了那块传说中的石板——它嵌在一面石墙上，大约一人多高，表面光滑如镜。\n\n石板上方刻着一行古老的文字：\n\n「将主人之名念出者，将获得自由。」\n\n可石板上的名字被一道深深的裂痕劈开了，只剩下几个残缺的笔画。你盯着看了很久，根本拼不出那是谁的名字。\n\n你不知道他是谁。你也不知道该念什么。",
+      hints: ["你还不知道主人的名字", "名字必须准确——念错会死", "上层也许有能告诉你名字的东西"],
+      grantItems: ["石板"],
+      choices: [
+        { text: "A. 用银匕首把石板劈开", next: "c4_break_stone", req: "银匕首" },
+        { text: "B. 先离开地牢，回上层去找线索", next: "c1_upstairs" }
+      ],
+      variants: [
+        {
+          requireItem: "铜牌(完整)",
+          text: "地牢比你想象的要大得多，但你顾不上看那些石牢了。\n\n走廊尽头，那块石板嵌在石墙上，大约一人多高，表面光滑如镜——名字被一道深深的裂痕劈开了。\n\n你掏出那枚完整的铜牌，对着石板的裂痕比了上去。\n\n铜牌背面的刻字和石板上的残笔严丝合缝地对上了，一个字母不缺：\n\n**EDMUND · 勒罗伊**\n\n伊丽莎白给你的，是完整的答案。",
+          hints: ["完整铜牌已经给出全部字母", "念对了，他才可能放手"],
+          choices: [
+            { text: "A. 念出名字：EDMUND", next: "c4_correct_name" },
+            { text: "B. 用银匕首把石板劈开", next: "c4_break_stone", req: "银匕首" },
+            { text: "C. 先退开，再想想", next: "c1_upstairs" }
+          ]
+        },
+        {
+          requireItem: "铜牌(名字线索)",
+          text: "地牢比你想象的要大得多。两边排列着石牢，很多牢门已经开了——里面空空如也，或只剩白骨。\n\n走廊尽头，那块石板嵌在石墙上。名字被一道深深的裂痕劈开，只剩下几个残缺的笔画。\n\n你掏出伊丽莎白给的那枚铜牌。牌上的字迹也只剩一半，能看清的只有两个线索：**以 E 开头，以 D 结尾**。\n\n中间那三个字母……得靠你猜。",
+          hints: ["E 开头、D 结尾", "错一个字母就会死", "EDMUND / EUGENE / ELVIN 里只有一个对"],
+          choices: [
+            { text: "A. 尝试念出名字：EDMUND", next: "c4_correct_name" },
+            { text: "B. 尝试念出名字：EUGENE", next: "c4_wrong_name" },
+            { text: "C. 尝试念出名字：ELVIN", next: "c4_wrong_name" },
+            { text: "D. 用银匕首把石板劈开", next: "c4_break_stone", req: "银匕首" }
+          ]
+        },
+        {
+          requireItem: "EDMUND的私人日记",
+          text: "地牢比你想象的要大得多。两边排列着石牢，很多牢门已经开了——里面空空如也，或只剩白骨。\n\n在走廊尽头，你看到了那块传说中的石板——它嵌在一面石墙上，大约一人多高，表面光滑如镜。\n\n石板上方刻着一行古老的文字：\n\n「将主人之名念出者，将获得自由。」\n\n但石板上的名字——被一道深深的裂痕劈开了，只能看到一部分字母。\n\n好在你在那间私人房间里读到了他的日记。你知道他叫什么。",
+          hints: ["6字母名字，以E开头，以D结尾", "EDMUND = 6字母 ✓", "ELVIN = 5字母 ✗", "EUGENE = 6字母但E结尾 ✗"],
+          choices: [
+            { text: "A. 尝试念出名字：EDMUND", next: "c4_correct_name" },
+            { text: "B. 尝试念出名字：EUGENE", next: "c4_wrong_name" },
+            { text: "C. 尝试念出名字：ELVIN", next: "c4_wrong_name" },
+            { text: "D. 用银匕首把石板劈开", next: "c4_break_stone", req: "银匕首" }
+          ]
+        }
+      ]
+    },
+
+    c4_wrong_name: {
+      chapter: "ch4",
+      title: "名字错误",
+      text: "你念出那个名字——\n\n石板剧烈震动，裂痕扩大了一倍。周围传来低沉的咆哮，像是有什么东西在苏醒……\n\n你感觉到一股压迫感从四面八方涌来。还没来得及逃，一只手从墙壁里伸了出来——\n\n这一次，你死得比之前任何一次都快。",
+      ending: "bad",
+      endText: "名字不对。但你现在知道了——名字必须对。再试一次。"
+    },
+
+    c4_correct_name: {
+      chapter: "ch4",
+      title: "正确的名字",
+      text: "你念出那个名字——EDMUND。\n\n石板停止震动。裂痕开始愈合。石板表面浮现出一幅画像：一个穿着黑色礼服的男人，面容俊美，但眼睛是完全漆黑的。\n\n「好多年了，」他的声音从石板里传出来，「终于有人念对了我的名字。」\n\n「埃尔文那个小家伙没成功。伊丽莎白也没成功。他们都只记住了我的名字，但不知道……怎么让我放手。」\n\n「而你……你手里有什么？银匕首？十字架？这些东西伤不了我。但你的选择……可以。」\n\n石板上浮现出三个选项。",
+      hints: ["他就是主人EDMUND", "他给出了三个选择"],
+      choices: [
+        { text: "A. 让他放所有灵魂走，你愿意自己留下", next: "c5_sacrifice" },
+        { text: "B. 要求他让所有人包括你一起离开", next: "c5_bargain" },
+        { text: "C. 质问他为什么要把所有人困在这里", next: "c5_truth" },
+        { text: "D. 拿出伊丽莎白的眼泪给他看", next: "c5_show_tears", req: "伊丽莎白的眼泪" },
+        { text: "E. 穿上那件男式黑礼服，告诉他你就是他", next: "c5_wear_clothes", req: "男式黑礼服" }
+      ]
+    },
+
+    c5_show_tears: {
+      chapter: "ch5",
+      title: "她的眼泪",
+      text: "你掏出那个装着伊丽莎白眼泪的小玻璃瓶，举到石板前。\n\nEDMUND的表情第一次真正变了。那是你见过他最接近\"人\"的时刻——不是那个永生的古堡主人，只是一个普通的男人。\n\n「这是……她的眼泪……」他的声音在颤抖。\n\n石板上浮现出伊丽莎白的脸，温柔而悲伤：\n\n「EDMUND，我等了你很久。但我不想让你继续困在这里。你困住了他们，也困住了你自己。」\n\n「让他们走吧。让自己也走吧。」\n\nEDMUND闭上眼睛。一滴黑色的泪从他石板上的眼睛里流了下来。\n\n「好。」他说，「我放过他们。也放过我自己。」",
+      ending: "good",
+      endText: "光芒从石板中涌出，照亮了整个地牢。你看到了那些飘浮的光点——它们开始向上升起，穿过墙壁，穿过天花板，飞向地面。\n\n伊丽莎白的光点在离开前，轻轻碰了一下你的额头。你听到她在你耳边说：「谢谢你。」\n\nEDMUND的光点走在最后。他回头看了你一眼：「替我去看看外面的世界。告诉我，1860年之后，人们过得好不好。」\n\n你点了点头。\n\n石板碎成星光，古堡开始崩塌。但这一次，你没有坠落。你站在阳光里——古堡已经消失了，只留下一片空旷的草地。\n\n你躺在草地上，看着蓝天白云。口袋里，那瓶眼泪还在。但玻璃瓶里已经空了——它的主人，终于带着它离开了。\n\n**（TRUE ENDING · 最完美的结局）**"
+    },
+
+    c5_wear_clothes: {
+      chapter: "ch5",
+      title: "穿上他的衣服",
+      text: "你从背包里掏出那件叠得整整齐齐的黑礼服——是你从他私人房间里拿到的。\n\n你当着他的面，慢慢穿上了它。\n\n礼服像是为你量身定做的。穿上的瞬间，你感觉到一股沉重的记忆涌来——不是你的记忆，是**他的**。\n\n你看到了1860年的冬天，瘟疫蔓延的小镇，一个男人跪在妻子床边握着她已经冰冷的手。你看到他在满是符咒的地下室里，用自己的血画着阵法。你看到他在仪式成功的那一刻，脸上没有喜悦，只有永恒的绝望。\n\n「你……你穿上了我的衣服……」EDMUND的声音从震惊变成了平静，「你……愿意替我吗？」\n\n你看着他的眼睛——那是你自己的眼睛了。\n\n「我不替你。」你说，「但我理解你了。你不是邪恶的主人，你只是一个悲伤的丈夫和父亲。你困住了他们，也困住了你自己。」\n\n「现在我来了。你可以走了。」\n\nEDMUND沉默了很久，然后笑了——这是你第一次看到他笑，不是嘲讽的，而是释然的。",
+      ending: "good",
+      endText: "黑礼服开始分解，化作无数光点从你身上飘散。EDMUND的光点和那些被囚禁了150年的灵魂一起，飞向了天空。\n\n你站在废墟中央——古堡已经不复存在，阳光洒在你身上。\n\n口袋里，EDMUND的私人日记还在。最后一页上，你写下了自己的名字：\n\n「2026年。他终于自由了。——我」\n\n**（TRUE ENDING · 理解与宽恕）**"
+    },
+
+    c4_break_stone: {
+      chapter: "ch4",
+      title: "劈开石板",
+      text: "你用银匕首狠狠劈向石板——石板碎成两半，里面流出大量黑色的血。\n\n古堡开始剧烈震动，墙壁崩塌。你看到了真相——石板后面是一个巨大的空间，里面飘浮着无数发光的光点。那是每一个被困在这里的灵魂。\n\n而在它们中间，是一个穿着黑礼服的男人，静静看着你。\n\n石板上的名字被你砸出来了——**EDMUND**。\n\n他笑了：「终于。终于有人打破了这该死的循环。但打破循环的代价是——你自己。」\n\n他伸出手，光点们开始向你汇聚。",
+      ending: "secret",
+      endText: "这是终极真相：这座古堡根本不是什么诅咒。EDMUND是1860年一场瘟疫中全家死绝的贵族。他不愿意接受死亡，用自己的灵魂为代价，把所有路过的人变成了「陪伴」。\n\n你打破了石板，他的力量分散到了你身上——现在你成了新的「主人」。你会放他们走吗？还是你也会……（HIDDEN ENDING：无限流继续，只是主角换了）"
+    },
+
+    // ========== 终章 ==========
+    c5_sacrifice: {
+      chapter: "ch5",
+      title: "牺牲",
+      text: "「好。」你说。「让他们都走。我留下。」\n\nEDMUND愣了一下，似乎没想到你会这么回答。「为什么？」\n\n「因为我见过他们每一个人。埃尔文的日记、伊丽莎白的眼泪、走廊里那些油画里的脸……他们都想回家。」\n\n「你呢？你不想回家吗？」\n\n你想了想。「我……我不知道。我甚至不记得我是谁了。」\n\nEDMUND叹了口气。他的身形开始慢慢透明。「你比我强。我当年……不愿放手。」\n\n石板碎成星光。整个古堡开始崩塌——不是毁灭，是**消散**，像清晨的雾气。你被一束光包住。",
+      ending: "good",
+      endText: "你再次睁开眼。你躺在医院的病床上。窗外是阳光。\n\n护士说你在废墟里被发现——一座据说已经荒废了一百五十年的古堡。\n\n你不记得自己是怎么进去的。但你记得那些名字：埃尔文、伊丽莎白、还有EDMUND。\n\n你去查了历史——1860年，那座古堡的主人EDMUND·勒罗伊和他的全家以及所有访客，在一夜之间全部失踪。没有尸体，没有线索，只有空荡荡的房子。\n\n而现在——你是唯一从那里出来的人。\n\n你把这个故事写下来，放在了古堡的新入口处。标题是：**血色回廊——那些被释放的灵魂**。"
+    },
+
+    c5_bargain: {
+      chapter: "ch5",
+      title: "谈判",
+      text: "「让所有人都走。」你说。「包括我。」\n\nEDMUND的笑容消失了：「你觉得这是你能决定的？」\n\n「我念出了你的名字，」你说，「按照石板上写的，念出名字者将获得自由。没说只能一个人。」\n\n他沉默了很久。\n\n「你是第一个……用这种方式跟我讲话的人。」他说，「其他人要么求饶要么寻死。你让我想起了1860年那个夜晚。那个小男孩埃尔文。他也是这么跟我说的。」\n\n「但他失败了。因为他没有你这种……」 EDMUND审视着你，「……你经历过太多次死亡了，是不是？你的眼睛里有一种东西，是第一次进入这里的人不会有的。」\n\n「好。我答应你。但有一个条件——你要把我的故事讲出去。让所有人知道，1860年发生了什么。」\n\n「好。」",
+      ending: "good",
+      endText: "你再一次睁开眼时，发现自己站在古堡外面。\n\n身后的大门缓缓关上，发出最后一声沉闷的响声，然后——整座古堡在你眼前化作一缕缕烟尘，随风飘散。\n\n你永远也不知道那一夜之后，古堡去了哪里。但你知道：那些灵魂……终于自由了。\n\n你在口袋里摸到了一样东西——埃尔文的那本日记。翻开最后一页，你发现多了一行字：「谢谢你。——E.」\n\n阳光照在你身上。这是你很久以来第一次感觉到温暖。"
+    },
+
+    c5_truth: {
+      chapter: "ch5",
+      title: "质问",
+      text: "「为什么？」你喊道，「为什么把他们都困在这里？1860年到底发生了什么？」\n\nEDMUND的表情变了。\n\n「1860年……」他喃喃道，「那年冬天，瘟疫来了。我亲眼看着我的妻子、我的孩子、我的仆人一个个倒下。」\n\n「我不想死。我花了三十年研究那个……那个仪式。我以为……我以为我可以让他们都活下来。」\n\n「但我错了。仪式出了问题。他们没有活过来，而是变成了……这里的一部分。」\n\n「我被困在了这里。他们也被困在了这里。我成了……这里的主人。也是囚徒。」\n\n「一百五十年。我看着一个又一个人走进来。我看着他们死去。我……我也不想这样。」\n\n你第一次在他的声音里听到了悲伤。\n\n「那你为什么不放他们走？」\n\n他沉默了。「因为我不知道怎么放。」他说，「我只知道……让活人不断地走进来，也许……也许有一天会有人能找到答案。」\n\n他看向你。「也许……就是今天。」",
+      choices: [
+        { text: "A. 「我会把你和他们一起带出去」", next: "c5_bargain" },
+        { text: "B. 「我会记住你说的话。我会让这个故事被知道」", next: "c5_sacrifice" }
+      ]
+    }
+
+  }
+};
+
+// ==================== 运行时 ====================
+let state = {
+  currentSceneId: GAME.start,
+  inventory: ["起始记忆"],
+  loopCount: 0,
+  history: [],
+  visits: { [GAME.start]: 1 }
+};
+
+const PERSISTENT_ITEMS = ["起始记忆"];
+
+updateUI();
+
+function updateUI() {
+  document.getElementById("loopCount").textContent = state.loopCount;
+  const scene = GAME.scenes[state.currentSceneId];
+  document.getElementById("chapterLabel").textContent = GAME.chapters[scene.chapter] || "";
+  renderScene();
+  renderInventory();
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// 按当前状态选择场景的显示版本（文案/提示/选项可随道具与是否重访而变）
+function resolveScene(scene) {
+  if (!Array.isArray(scene.variants)) return scene;
+  const revisits = (state.visits[state.currentSceneId] || 0) > 1;
+  for (const v of scene.variants) {
+    if (v.requireItem && !state.inventory.includes(v.requireItem)) continue;
+    if (v.forbidItem && state.inventory.includes(v.forbidItem)) continue;
+    if (v.requireRevisit && !revisits) continue;
+    if (v.requireFirstVisit && revisits) continue;
+    return {
+      ...scene,
+      title: v.title || scene.title,
+      text: v.text || scene.text,
+      hints: v.hints,
+      choices: v.choices || scene.choices
+    };
+  }
+  return scene;
+}
+
+function renderScene() {
+  const scene = resolveScene(GAME.scenes[state.currentSceneId]);
+  const container = document.getElementById("sceneContainer");
+  const t = (s) => esc(s).replace(/\n/g, "<br>");
+
+  let html = `<div class="scene-title">【${t(scene.title)}】</div>`;
+  html += `<div class="scene-text">${t(scene.text)}</div>`;
+
+  if (scene.hints) {
+    scene.hints.forEach(h => { html += `<div class="hint">💡 ${t(h)}</div>`; });
+  }
+
+  if (scene.ending) {
+    let cls = "", label = "";
+    if (scene.ending === "good") { cls = "ending-good"; label = "✨ TRUE ENDING · 逃脱成功"; }
+    else if (scene.ending === "secret") { cls = "ending-secret"; label = "🔮 HIDDEN ENDING · 终极真相"; }
+    else if (scene.ending === "loop") { cls = "ending-bad"; label = "🌀 轮回 · 记忆保留"; }
+    else { cls = "ending-bad"; label = "💀 你死了"; }
+    html += `<div class="${cls}">${label}</div>`;
+    if (scene.endText) html += `<div class="scene-text" style="margin-top:16px;text-align:center;">${t(scene.endText)}</div>`;
+    html += `<button class="restart-btn" onclick="restart()">🔄 新一轮轮回</button>`;
+  } else {
+    html += `<ul class="choices">`;
+    scene.choices.forEach((c, i) => {
+      let disabled = "";
+      let reqText = c.req ? `<span class="req">[需要: ${t(c.req)}]</span>` : "";
+      if (c.req && !state.inventory.includes(c.req)) disabled = "disabled";
+      html += `<li><button class="choice-btn" ${disabled} onclick="makeChoice(${i})">${t(c.text)}${reqText}</button></li>`;
+    });
+    html += `</ul>`;
+  }
+
+  container.innerHTML = html;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderInventory() {
+  const area = document.getElementById("inventoryArea");
+  const HIDDEN = ["起始记忆", "红女已消散", "红女之信"];
+  let items = state.inventory.filter(i => !HIDDEN.includes(i));
+  if (items.length === 0) { area.innerHTML = ""; return; }
+  let html = `<div class="inventory"><div class="inventory-title">📦 物品栏</div>`;
+  items.forEach(i => { html += `<span class="item-tag">${esc(i)}</span>`; });
+  if (state.history.length > 0) html += `<div style="margin-top:8px;color:#664;font-size:12px;">已探索: ${state.history.length} 个场景</div>`;
+  html += `</div>`;
+  area.innerHTML = html;
+}
+
+function makeChoice(index) {
+  const scene = resolveScene(GAME.scenes[state.currentSceneId]);
+  const choice = scene.choices[index];
+  if (choice.req && !state.inventory.includes(choice.req)) return;
+
+  state.history.push(state.currentSceneId);
+  const targetScene = GAME.scenes[choice.next];
+  if (targetScene.grantItems) {
+    targetScene.grantItems.forEach(item => {
+      if (!state.inventory.includes(item)) state.inventory.push(item);
+    });
+  }
+
+  // 轮回结局：重置物品但保留关键项
+  const needLoop = (scene.ending === "bad" || scene.ending === "loop" ||
+                    targetScene.ending === "bad" || targetScene.ending === "loop");
+  state.currentSceneId = choice.next;
+  state.visits[state.currentSceneId] = (state.visits[state.currentSceneId] || 0) + 1;
+  if (needLoop) {
+    state.loopCount++;
+    state.inventory = state.inventory.filter(i => PERSISTENT_ITEMS.includes(i));
+    state.history = [];
+    state.visits = {};
+  }
+  updateUI();
+}
+
+function restart() {
+  state.loopCount++;
+  state.currentSceneId = GAME.start;
+  state.history = [];
+  state.visits = { [GAME.start]: 1 };
+  state.inventory = state.inventory.filter(i => PERSISTENT_ITEMS.includes(i));
+  updateUI();
+}
+</script>
+</body>
+</html>
